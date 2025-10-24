@@ -1,0 +1,83 @@
+services:
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: user
+      RABBITMQ_DEFAULT_PASS: password
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - app-network
+
+  song-downloader:
+    build:
+      context: ./song-downloader
+      dockerfile: Dockerfile
+    container_name: song-downloader
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: user
+      RABBITMQ_PASSWORD: password
+    volumes:
+      - ./shared:/app/shared
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  lyrics-fetcher:
+    build:
+      context: ./lyrics-fetcher
+      dockerfile: Dockerfile
+    container_name: lyrics-fetcher
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: user
+      RABBITMQ_PASSWORD: password
+    volumes:
+      - ./shared:/app/shared
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  video-generator:
+    build:
+      context: ./video-generator
+      dockerfile: Dockerfile
+    container_name: video-generator
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: user
+      RABBITMQ_PASSWORD: password
+    volumes:
+      - ./shared:/app/shared
+    networks:
+      - app-network
+    restart: unless-stopped
+
+volumes:
+  rabbitmq_data:
+
+networks:
+  app-network:
+    driver: bridge
