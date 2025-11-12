@@ -1,82 +1,97 @@
 services:
   rabbitmq:
-    image: rabbitmq:3-management-alpine
-    container_name: rabbitmq
+    image: rabbitmq:3-management
     ports:
       - "5672:5672"
       - "15672:15672"
     environment:
-      RABBITMQ_DEFAULT_USER: user
-      RABBITMQ_DEFAULT_PASS: password
+      - RABBITMQ_DEFAULT_USER=user
+      - RABBITMQ_DEFAULT_PASS=password
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      test: rabbitmq-diagnostics -q ping
       interval: 10s
       timeout: 5s
       retries: 5
-    volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
     networks:
       - app-network
+
+  speech-enhancement:
+    build:
+      context: ./speech-enhancement
+    environment:
+      - GRPC_PORT=50051
+    volumes:
+      - ./shared/audio:/app/shared/audio
+      - ./shared/audio_vocals:/app/shared/audio_vocals
+      - ./shared/audio_music:/app/shared/audio_music
+    networks:
+      - app-network
+    restart: unless-stopped
 
   song-downloader:
     build:
       context: ./song-downloader
-      dockerfile: Dockerfile
-    container_name: song-downloader
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USER=user
+      - RABBITMQ_PASSWORD=password
+      - ENHANCEMENT_HOST=speech-enhancement
+      - ENHANCEMENT_PORT=50051
+    volumes:
+      - ./shared/audio:/app/shared/audio
+      - ./shared/audio_vocals:/app/shared/audio_vocals
+      - ./shared/audio_music:/app/shared/audio_music
+      - ./shared/models:/app/shared/models  # Cache models here
     depends_on:
       rabbitmq:
         condition: service_healthy
-    environment:
-      RABBITMQ_HOST: rabbitmq
-      RABBITMQ_PORT: 5672
-      RABBITMQ_USER: user
-      RABBITMQ_PASSWORD: password
-    volumes:
-      - ./shared:/app/shared
+      speech-enhancement:
+        condition: service_started
+    restart: unless-stopped
     networks:
       - app-network
-    restart: unless-stopped
 
   lyrics-fetcher:
     build:
       context: ./lyrics-fetcher
-      dockerfile: Dockerfile
-    container_name: lyrics-fetcher
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USER=user
+      - RABBITMQ_PASSWORD=password
+      - WHISPER_MODEL=tiny.en
+    volumes:
+      - ./shared/audio:/app/shared/audio:ro
+      - ./shared/audio_vocals:/app/shared/audio_vocals:ro
+      - ./shared/lyrics:/app/shared/lyrics
     depends_on:
       rabbitmq:
         condition: service_healthy
-    environment:
-      RABBITMQ_HOST: rabbitmq
-      RABBITMQ_PORT: 5672
-      RABBITMQ_USER: user
-      RABBITMQ_PASSWORD: password
-    volumes:
-      - ./shared:/app/shared
+    restart: unless-stopped
     networks:
       - app-network
-    restart: unless-stopped
 
   video-generator:
     build:
       context: ./video-generator
-      dockerfile: Dockerfile
-    container_name: video-generator
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USER=user
+      - RABBITMQ_PASSWORD=password
+      - PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+      - PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+    volumes:
+      - ./shared/audio:/app/shared/audio:ro
+      - ./shared/lyrics:/app/shared/lyrics:ro
+      - ./shared/videos:/app/shared/videos
     depends_on:
       rabbitmq:
         condition: service_healthy
-    environment:
-      RABBITMQ_HOST: rabbitmq
-      RABBITMQ_PORT: 5672
-      RABBITMQ_USER: user
-      RABBITMQ_PASSWORD: password
-    volumes:
-      - ./shared:/app/shared
+    restart: unless-stopped
     networks:
       - app-network
-    restart: unless-stopped
-
-volumes:
-  rabbitmq_data:
 
 networks:
   app-network:

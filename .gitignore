@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Large model files - downloaded at runtime
+shared/models/*.onnx
+shared/models/*.ckpt
+shared/models/*.yaml
+shared/models/*.json
+shared/models/
+
+# Audio files - generated at runtime
+shared/audio/*.mp3
+shared/audio/*.wav
+shared/audio_vocals/*.wav
+shared/audio_music/*.wav
+shared/videos/*.mp4
+shared/lyrics/*.json
+shared/lyrics/*.lrc

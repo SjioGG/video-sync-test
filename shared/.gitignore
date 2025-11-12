@@ -1,0 +1,7 @@
+audio/**
+audio_music/**
+audio_vocals/**
+lyrics/**
+videos/**
+models/**
+.DS_Store

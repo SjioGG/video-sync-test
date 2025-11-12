@@ -1,0 +1,6 @@
+grpcio==1.60.0
+grpcio-tools==1.60.0
+torch==2.2.0
+torchaudio==2.2.0
+soundfile==0.12.1
+deepfilternet==0.5.6
