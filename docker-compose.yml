@@ -15,19 +15,6 @@ services:
     networks:
       - app-network
 
-  speech-enhancement:
-    build:
-      context: ./speech-enhancement
-    environment:
-      - GRPC_PORT=50051
-    volumes:
-      - ./shared/audio:/app/shared/audio
-      - ./shared/audio_vocals:/app/shared/audio_vocals
-      - ./shared/audio_music:/app/shared/audio_music
-    networks:
-      - app-network
-    restart: unless-stopped
-
   song-downloader:
     build:
       context: ./song-downloader
@@ -36,8 +23,23 @@ services:
       - RABBITMQ_PORT=5672
       - RABBITMQ_USER=user
       - RABBITMQ_PASSWORD=password
-      - ENHANCEMENT_HOST=speech-enhancement
-      - ENHANCEMENT_PORT=50051
+    volumes:
+      - ./shared/audio:/app/shared/audio
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  audio-separation:
+    build:
+      context: ./audio-separation
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USER=user
+      - RABBITMQ_PASSWORD=password
     volumes:
       - ./shared/audio:/app/shared/audio
       - ./shared/audio_vocals:/app/shared/audio_vocals
@@ -46,8 +48,6 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
-      speech-enhancement:
-        condition: service_started
     restart: unless-stopped
     networks:
       - app-network
@@ -60,10 +60,8 @@ services:
       - RABBITMQ_PORT=5672
       - RABBITMQ_USER=user
       - RABBITMQ_PASSWORD=password
-      - WHISPER_MODEL=tiny.en
     volumes:
       - ./shared/audio:/app/shared/audio:ro
-      - ./shared/audio_vocals:/app/shared/audio_vocals:ro
       - ./shared/lyrics:/app/shared/lyrics
     depends_on:
       rabbitmq:
@@ -74,25 +72,75 @@ services:
 
   video-generator:
     build:
-      context: ./video-generator
+      context: .
+      dockerfile: ./video-generator/Dockerfile
     environment:
       - RABBITMQ_HOST=rabbitmq
       - RABBITMQ_PORT=5672
       - RABBITMQ_USER=user
       - RABBITMQ_PASSWORD=password
-      - PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
-      - PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+      - MONGODB_URI=mongodb://admin:password@mongodb:27017/
+      - S3_ENDPOINT=minio:9000
+      - S3_ACCESS_KEY=minioadmin
+      - S3_SECRET_KEY=minioadmin
+      - S3_BUCKET=karaoke-videos
+      - S3_SECURE=false
     volumes:
       - ./shared/audio:/app/shared/audio:ro
+      - ./shared/audio_music:/app/shared/audio_music:ro
       - ./shared/lyrics:/app/shared/lyrics:ro
       - ./shared/videos:/app/shared/videos
     depends_on:
       rabbitmq:
         condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
     restart: unless-stopped
+    networks:
+      - app-network
+
+  mongodb:
+    image: mongo:8.0
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=password
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+
+  minio:
+    image: minio/minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - app-network
 
 networks:
   app-network:
     driver: bridge
+
+volumes:
+  mongodb_data:
+  minio_data:

@@ -1,0 +1,2 @@
+# audio-separation/requirements.txt
+pika==1.3.2

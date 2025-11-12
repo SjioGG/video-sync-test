@@ -1,37 +1,30 @@
 # video-generator/Dockerfile
-FROM node:18-bullseye
+FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install Chrome dependencies for Remotion
+# Install system dependencies for moviepy
 RUN apt-get update && apt-get install -y \
     ffmpeg \
-    chromium \
-    fonts-liberation \
-    libasound2 \
-    libatk-bridge2.0-0 \
-    libatk1.0-0 \
-    libatspi2.0-0 \
-    libcups2 \
-    libdbus-1-3 \
-    libdrm2 \
-    libgbm1 \
-    libgtk-3-0 \
-    libnspr4 \
-    libnss3 \
-    libwayland-client0 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxfixes3 \
-    libxkbcommon0 \
-    libxrandr2 \
-    xdg-utils \
+    imagemagick \
+    fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
-COPY package*.json ./
-COPY .npmrc ./
-RUN npm install
+# Fix ImageMagick policy to allow text operations
+RUN find /etc -name policy.xml -exec sed -i \
+    -e '/<policy domain="path" rights="none" pattern="@\*"/d' \
+    -e 's/<policy domain="coder" rights="none" pattern="TEXT" \/>/<policy domain="coder" rights="read|write" pattern="TEXT" \/>/g' \
+    -e 's/<policy domain="coder" rights="none" pattern="LABEL" \/>/<policy domain="coder" rights="read|write" pattern="LABEL" \/>/g' \
+    {} \;
 
-COPY . .
+# Copy service files
+COPY video-generator/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-CMD ["node", "consumer.js"]
+# Copy storage package
+COPY video-generator/storage /app/storage
+
+# Copy main application
+COPY video-generator/*.py /app/
+
+CMD ["python", "main.py"]
